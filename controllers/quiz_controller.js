@@ -2,7 +2,10 @@ var models = require('../models/models.js');
 
 // Autoload - factoriza el código si ruta incluye :quizId
 exports.load = function(req, res, next, quizId) {
-	models.Quiz.findById(quizId).then(
+	models.Quiz.find({
+			where: {id: Number(quizId)},
+			include: [{model: models.Comment}]
+		}).then(
 		function(quiz){
 			if(quiz){
 				req.quiz = quiz;
@@ -41,8 +44,23 @@ exports.create = function(req, res){
 
 
 // GET /quizes  muestra preguntas
-exports.index = function(req, res){
-	models.Quiz.findAll().then(function(quizes){
+exports.index = function(req, res, next){
+	var consulta = {};
+	if (req.query.search) {
+		consulta = {
+		  where: {
+			$or: [
+				{pregunta: {$like: "%" + req.query.search.replace(" ", '%') + "%"}},
+				{tema: {$like: "%" + req.query.search.replace(" ", '%') + "%"}}
+			]
+		  },
+		  order: [
+			 ['tema' , 'ASC'],
+			 ['pregunta' , 'ASC']
+		  ]
+		}
+	};
+	models.Quiz.findAll(consulta).then(function(quizes){
 		res.render('quizes/index', {quizes: quizes, errors: []});
 	}).catch(function(error) {next(error);})
 };
@@ -86,7 +104,7 @@ exports.answer = function(req, res){
 			resultado = 'Correcto';
 	}
 	res.render('quizes/answer',
-				{quiz: req.quiz,
+				{quiz: req.quiz, 
 				 respuesta: resultado,
 				 errors: []
 				}
@@ -95,7 +113,7 @@ exports.answer = function(req, res){
 
 // PUT /quizes/:id
 exports.update= function(req, res) {
-	req.quiz.tema = req.body.quiz.tema;
+	req.quiz.tema = req.body.quiz.tema;	
 	req.quiz.pregunta = req.body.quiz.pregunta;
 	req.quiz.respuesta = req.body.quiz.respuesta;
 
@@ -126,3 +144,29 @@ exports.destroy = function(req, res) {
 exports.author = function(req, res){
 	res.render('author', {nombre: 'Roberto Lozano Sáez', errors: []});
 };
+
+// GET /quizes/statistics
+exports.statistics = function(req, res){
+	models.Quiz.findAll().then(function(stadquery1){
+		var TotPreguntas = stadquery1.length;
+		models.Comment.findAll().then(function(stadquery2){
+			var TotComentarios = stadquery2.length;
+			models.Quiz.findAll({include: [{model: models.Comment, required: true}]}).then(function(stadquery3){
+				var PregConCom = stadquery3.length;
+				var PregSinCom = TotPreguntas - PregConCom;
+				var Media = 0;
+				if (TotPreguntas !=0) Media= (TotComentarios / TotPreguntas).toFixed(2);
+				res.render('quizes/statistics', {
+					TotalPreguntas: TotPreguntas, 
+					TotalComentarios: TotComentarios,
+					MediaComxPreg: Media, 
+					PreguntasConCom: PregConCom, 
+					PreguntasSinCom: PregSinCom,
+					errors: []
+				});
+			});
+		});
+		
+	});
+};
+
